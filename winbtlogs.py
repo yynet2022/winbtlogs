@@ -54,7 +54,7 @@ def is_target(SourceName, ID):
 
 
 fba = f'A_{fb}.csv'
-with open(fba, 'w', encoding="utf_8_sig") as fd:
+with open(fba, 'w', encoding='utf_8_sig') as fd:
     while e := win32evtlog.ReadEventLog(h, f, 0):
         for e_obj in e:
             e_id = winerror.HRESULT_CODE(e_obj.EventID)
@@ -78,7 +78,15 @@ with open(fba, 'w', encoding="utf_8_sig") as fd:
                 fd.write(w)
 
 fbb = f'B_{fb}.csv'
-with open(fbb, 'w', encoding="utf_8_sig") as fd:
+with open(fbb, 'w', encoding='utf_8_sig') as fd:
     for k in sorted(days_ev.keys()):
         s = '{},{},{}\n'.format(k, days_ev[k]['S'], days_ev[k]['E'])
         fd.write(s)
+
+fbc = f'C_{fb}.csv'
+with open(fba, 'r', encoding='utf_8_sig') as fda:
+    a = fda.readlines()
+    a.sort()
+    with open(fbc, 'w', encoding='utf_8_sig') as fdc:
+        for b in a:
+            fdc.write(b)
