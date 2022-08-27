@@ -1,2 +1,2 @@
 # winbtlogs
-Windows の起動・終了の時刻を CVS に落とす Python スクリプト
+Windows の起動・終了の時刻を CSV に落とす Python スクリプト
