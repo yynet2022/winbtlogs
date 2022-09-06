@@ -1,6 +1,7 @@
 @powershell -NoProfile -ExecutionPolicy Unrestricted "$s=[scriptblock]::create((gc \"%~f0\"|?{$_.readcount -gt 1})-join\"`n\");&$s" %*&goto:eof
 
-#GET-WinEvent -ListProvider *
+# GET-WinEvent -ListProvider *
+$csv=GET-Date -UFormat "W_%Y%m%d_%H%M%S.csv"
 
 $a=GET-WinEvent -FilterHashtable @{
    LogName='System'
@@ -17,4 +18,4 @@ $b=GET-WinEvent -FilterHashtable @{
 $a + $b | `
 Select-Object TimeCreated,ProviderName,Id,LevelDisplayName,Message | `
 Sort-Object -Property TimeCreated | `
-Export-CSV b.csv -NoTypeInformation -Encoding UTF8
+Export-CSV $csv -NoTypeInformation -Encoding UTF8
