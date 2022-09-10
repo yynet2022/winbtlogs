@@ -4,6 +4,7 @@ import datetime
 import win32evtlog
 import winerror
 import sqlite3
+from plyer import notification
 
 TABLE_NAME = 'pconoff'
 DB_NAME = f'{TABLE_NAME}_{{}}.db'
@@ -108,14 +109,23 @@ def main():
             sss = '{}:{:02d}:{:02d}'.format(
                 int(ss // 3600), int(ss % 3600 // 60), int(ss % 60))
             fd.write(f'Total,,,{sss}\n')
-            tv[q] = tx
+        tv[q] = tx
 
-    for k in sorted(tv.keys()):
-        ss = tv[k].total_seconds()
-        sss = '{}h {:02d}m {:02d}s'.format(
-            int(ss // 3600), int(ss % 3600 // 60), int(ss % 60))
-        print(k, sss)
+    s0 = tv[DBs[0]].total_seconds()
+    ss0 = '{}h {:02d}m {:02d}s'.format(
+        int(s0 // 3600), int(s0 % 3600 // 60), int(s0 % 60))
 
+    s1 = tv[DBs[1]].total_seconds()
+    ss1 = '{}h {:02d}m {:02d}s'.format(
+        int(s1 // 3600), int(s1 % 3600 // 60), int(s1 % 60))
+
+    notification.notify(
+        app_name='OnOFF',
+        app_icon='Squirrel.ico',
+        title='勤務時間',
+        message=f'先月 ({DBs[0]}) {ss0}\n' + f'今月 ({DBs[1]}) {ss1}',
+        timeout=15
+    )
 
 if __name__ == '__main__':
     main()
