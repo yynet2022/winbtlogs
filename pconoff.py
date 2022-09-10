@@ -5,17 +5,21 @@ import win32evtlog
 import winerror
 import sqlite3
 
-TargetSourceNames = ('Microsoft-Windows-Kernel-Power',
-                     'Microsoft-Windows-Kernel-Boot',
-                     'Microsoft-Windows-Winlogon')
-TargetIDs = (12, 13, 6005, 6006, 6008)
+TABLE_NAME = 'pconoff'
+DB_NAME = f'{TABLE_NAME}_{{}}.db'
+CSV_NAME = f'{TABLE_NAME}_{{}}.csv'
+
+TARGET_SOURCE_NAMES = ('Microsoft-Windows-Kernel-Power',
+                       'Microsoft-Windows-Kernel-Boot',
+                       'Microsoft-Windows-Winlogon')
+TARGET_IDS = (12, 13, 6005, 6006, 6008)
 
 
 def isTarget(SourceName, ID):
-    if SourceName in TargetSourceNames:
+    if SourceName in TARGET_SOURCE_NAMES:
         return True
 
-    if ID in TargetIDs:
+    if ID in TARGET_IDS:
         return True
 
     return False
@@ -23,24 +27,23 @@ def isTarget(SourceName, ID):
 
 def Event2DB():
     DBcons = dict()
-    h = win32evtlog.OpenEventLog("localhost", "System")
+    h = win32evtlog.OpenEventLog('localhost', 'System')
     f = win32evtlog.EVENTLOG_FORWARDS_READ | \
         win32evtlog.EVENTLOG_SEQUENTIAL_READ
     while e := win32evtlog.ReadEventLog(h, f, 0):
         for ee in e:
             eID = winerror.HRESULT_CODE(ee.EventID)
             if isTarget(ee.SourceName, eID):
-                # print(ee.TimeGenerated,eID,ee.SourceName)
                 dbID = ee.TimeGenerated.strftime('%Y%m')
                 if dbID not in DBcons:
-                    db = f'pconoff{dbID}.db'
+                    db = DB_NAME.format(dbID)
                     con = sqlite3.connect(db)
                     cur = con.cursor()
                     DBcons[dbID] = (con, cur)
 
                     # Create table
                     cur.execute(
-                      'CREATE TABLE if not exists pconoff'
+                      f'CREATE TABLE if not exists {TABLE_NAME}'
                       ' (gtime timestamp, ID int, SName text,'
                       '  UNIQUE(gtime,ID,SName))')
                 else:
@@ -50,8 +53,8 @@ def Event2DB():
                 t = ee.TimeGenerated
                 s = ee.SourceName
                 cur.execute(
-                    f"INSERT INTO pconoff VALUES ('{t}',{eID},'{s}')"
-                    " on conflict(gtime,ID,SName) do nothing")
+                    f"INSERT INTO {TABLE_NAME} VALUES ('{t}',{eID},'{s}')"
+                    ' on conflict(gtime,ID,SName) do nothing')
 
     for k in DBcons:
         con, cur = DBcons[k]
@@ -62,7 +65,6 @@ def Event2DB():
 def main():
     Event2DB()
 
-    dv = dict()
     tv = dict()
     ts = datetime.time(0, 0, 0)
     te = datetime.time(23, 59, 59)
@@ -71,15 +73,17 @@ def main():
     m = datetime.datetime(n.year, n.month, 1) - datetime.timedelta(days=1)
     DBs = [m.strftime('%Y%m'), n.strftime('%Y%m')]
 
-    for k in DBs:
-        db = f'file:pconoff{k}.db?mode=rw'
+    for q in DBs:
+        _db = DB_NAME.format(q)
+        db = f'file:{_db}?mode=rw'
         try:
             con = sqlite3.connect(db, uri=True)
         except Exception:
             continue
-
         cur = con.cursor()
-        for row in cur.execute('SELECT * FROM pconoff ORDER BY gtime'):
+
+        dv = dict()
+        for row in cur.execute(f'SELECT * FROM {TABLE_NAME} ORDER BY gtime'):
             tt = datetime.datetime.fromisoformat(row[0])
             d = tt.date()
             t = tt.time()
@@ -89,20 +93,28 @@ def main():
             if t > dv[d]['E']:
                 dv[d]['E'] = t
         con.close()
-        tv.setdefault(k, datetime.timedelta(seconds=0))
 
-    for k in sorted(dv.keys()):
-        dte = datetime.datetime.combine(k, dv[k]['E'])
-        dts = datetime.datetime.combine(k, dv[k]['S'])
-        tt = dte - dts
-        s = '{},{},{},{}'.format(k, dv[k]['S'], dv[k]['E'], tt)
-        print(s)
-        m = dts.strftime('%Y%m')
-        tv[m] += tt
+        tx = datetime.timedelta(seconds=0)
+        c = CSV_NAME.format(q)
+        with open(c, 'w', encoding='utf_8_sig') as fd:
+            for k in sorted(dv.keys()):
+                dte = datetime.datetime.combine(k, dv[k]['E'])
+                dts = datetime.datetime.combine(k, dv[k]['S'])
+                tt = dte - dts
+                s = '{},{},{},{}\n'.format(k, dv[k]['S'], dv[k]['E'], tt)
+                fd.write(s)
+                tx += tt
+            ss = tx.total_seconds()
+            sss = '{}:{:02d}:{:02d}'.format(
+                int(ss // 3600), int(ss % 3600 // 60), int(ss % 60))
+            fd.write(f'Total,,,{sss}\n')
+            tv[q] = tx
 
     for k in sorted(tv.keys()):
-        s = tv[k].total_seconds()
-        print(k, '{}h {:02d}m'.format(int(s // 3600), int(s % 3600 // 60)))
+        ss = tv[k].total_seconds()
+        sss = '{}h {:02d}m {:02d}s'.format(
+            int(ss // 3600), int(ss % 3600 // 60), int(ss % 60))
+        print(k, sss)
 
 
 if __name__ == '__main__':
