@@ -45,7 +45,7 @@ class _OvertimeCalculator:
             if s < e:
                 t += (datetime.datetime.combine(d, e) -
                       datetime.datetime.combine(d, s))
-            
+
         _calc(self.LUNCH_START_TIME, self.LUNCH_END_TIME)
         for r in self.REST_TIMES:
             _calc(r[0], r[1])
@@ -54,12 +54,36 @@ class _OvertimeCalculator:
         return t
 
     def calc(self, s_time, e_time, type_off=0, target_date=None):
-        if type_off == DAY_OFF:
-            return datetime.timedelta(0)
+        '''
+        t_work: 勤務時間
+        t_actl: 実労働時間
+        t_paid: 有休休暇時間
+        t_rest: 休憩時間（中断時間含む）
+        t_form: 所定労働時間
+        '''
 
-        t_date = target_date
-        if t_date is None:
-            t_date = datetime.date.today()
+        td = target_date
+        if td is None:
+            td = datetime.date.today()
+
+        def t_intr(s, e):
+            if s < e:
+                return (datetime.datetime.combine(td, e) -
+                        datetime.datetime.combine(td, s))
+            else:
+                return datetime.timedelta(0)
+
+        ts = self.WORK_START_TIME
+        te = self.WORK_END_TIME
+        tr = self.calcResttime(ts, te)
+        t_form = t_intr(ts, te) - tr
+
+        if type_off == DAY_OFF:
+            t_work = t_form
+            t_actl = datetime.timedelta(0)
+            t_paid = t_form
+            t_rest = tr
+            return t_actl
 
         # 年休時間と実労働時間が重ならないように調整。
         ts = s_time
@@ -74,33 +98,25 @@ class _OvertimeCalculator:
             # 例えば、午後休みなのに 14時～15時勤務、とかがここに来る。
             return datetime.timedelta(0)
 
-        # 所定労働時間（年休時間省く）を算出
-        wt = datetime.timedelta(0)
+        # 年休時間
+        t_paid = datetime.timedelta(0)
         if type_off == AM_OFF:
-            wt += (datetime.datetime.combine(t_date, self.WORK_END_TIME) -
-                   datetime.datetime.combine(t_date, self.LUNCH_END_TIME))
+            t_paid = t_intr(self.WORK_START_TIME, self.LUNCH_START_TIME)
         elif type_off == PM_OFF:
-            wt += (datetime.datetime.combine(t_date, self.LUNCH_START_TIME) -
-                   datetime.datetime.combine(t_date, self.WORK_START_TIME))
-        else:
-            wt += (datetime.datetime.combine(t_date, self.WORK_END_TIME) -
-                   datetime.datetime.combine(t_date, self.WORK_START_TIME) -
-                   (datetime.datetime.combine(t_date, self.LUNCH_END_TIME) -
-                    datetime.datetime.combine(t_date, self.LUNCH_START_TIME)))
+            t_paid = t_intr(self.LUNCH_END_TIME, self.WORK_END_TIME)
 
-        # 実労働時間を算出
-        dts = datetime.datetime.combine(t_date, ts)
-        dte = datetime.datetime.combine(t_date, te)
-        t = dte - dts
+        # 休憩時間（中断時間含む）
+        t_rest = self.calcResttime(ts, te)
 
-        # 休憩時間・中断時間を考慮
-        t -= self.calcResttime(ts, te)
+        # 実労働時間
+        t_actl = t_intr(ts, te) - t_rest
 
-        # 所定労働時間（年休時間省く）を引いて残業時間を算出
-        t -= wt
+        # 勤務時間
+        t_work = t_actl + t_paid
 
-        print('>', s_time, e_time, _Timedelta2str(t))
-        return t
+        # print('>', s_time, e_time, _Timedelta2str(t))
+        print('>', s_time, e_time, '|', t_work, t_actl, t_work-t_form)
+        return t_work
 
 
 class MyOvertime(_OvertimeCalculator):
