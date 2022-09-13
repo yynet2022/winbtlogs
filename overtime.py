@@ -56,6 +56,9 @@ class _OvertimeCalculator:
 
     REST_TIMES = []
 
+    def isHoliday(cls, d):
+        return d.weekday() == 5 or d.weekday() == 6
+
     def calcResttime(self, ts, te):
         ''' 時刻tsから時刻teの間の所定休憩時間 '''
         t = datetime.timedelta(0)
@@ -77,6 +80,22 @@ class _OvertimeCalculator:
         return t
 
     def calc(self, s_time=None, e_time=None, type_off=0):
+        if s_time is not None and self.isHoliday(s_time):
+            return self.calcHoliday(s_time, e_time)
+        else:
+            return self.calcWorkday(s_time, e_time, type_off)
+
+    def calcHoliday(self, s_time=None, e_time=None):
+        t_form = datetime.timedelta(0)
+        t_paid = datetime.timedelta(0)
+        t_rest = datetime.timedelta(0)
+
+        t_actl = e_time - s_time if s_time < e_time else datetime.timedelta(0)
+        t_work = t_actl
+
+        return Worktime(t_form, t_work, t_actl, t_paid, t_rest)
+
+    def calcWorkday(self, s_time=None, e_time=None, type_off=0):
         '''
         t_form: 所定労働時間
         t_work: 勤務時間
@@ -214,6 +233,20 @@ def main():
     assert o.calc(T('12:30'), T('16:00'), type_off=AM_OFF) == \
         Worktime(form=DT('7:45'), work=DT('6:30'),
                  actl=DT('2:45'), paid=DT('3:45'), rest=DT('0:45'))
+
+    def HT(s):
+        hd = datetime.date(year=2022, month=9, day=10)
+        h, m = s.split(':')
+        t = datetime.time(hour=int(h), minute=int(m))
+        return datetime.datetime.combine(hd, t)
+
+    assert o.calc(HT('7:10'), HT('13:30')) == \
+        Worktime(form=DT('0:00'), work=DT('6:20'),
+                 actl=DT('6:20'), paid=DT('0:00'), rest=DT('0:00'))
+
+    assert o.calc(HT('12:30'), HT('16:00')) == \
+        Worktime(form=DT('0:00'), work=DT('3:30'),
+                 actl=DT('3:30'), paid=DT('0:00'), rest=DT('0:00'))
 
 
 if __name__ == '__main__':
