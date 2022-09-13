@@ -47,6 +47,7 @@ class Worktime:
                    _Timedelta2str(self.paid),
                    _Timedelta2str(self.rest))
 
+
 class _OvertimeCalculator:
     WORK_START_TIME = datetime.time(hour=8, minute=30)
     WORK_END_TIME = datetime.time(hour=17, minute=30)
@@ -58,7 +59,7 @@ class _OvertimeCalculator:
     def calcResttime(self, ts, te):
         ''' 時刻tsから時刻teの間の所定休憩時間 '''
         t = datetime.timedelta(0)
-        d = datetime.datetime.today()
+        d = datetime.date.today()
 
         def _calc(rs, re):
             nonlocal t
@@ -75,7 +76,7 @@ class _OvertimeCalculator:
         # print('R>', ts, te, t)
         return t
 
-    def calc(self, s_time=None, e_time=None, type_off=0, target_date=None):
+    def calc(self, s_time=None, e_time=None, type_off=0):
         '''
         t_form: 所定労働時間
         t_work: 勤務時間
@@ -84,9 +85,10 @@ class _OvertimeCalculator:
         t_rest: 休憩時間（中断時間含む）
         '''
 
-        td = target_date
-        if td is None:
+        if s_time is None:
             td = datetime.date.today()
+        else:
+            td = s_time.date()
 
         def t_intr(s, e):
             if s < e:
@@ -95,11 +97,13 @@ class _OvertimeCalculator:
             else:
                 return datetime.timedelta(0)
 
-        ts = self.WORK_START_TIME
-        te = self.WORK_END_TIME
-        tr = self.calcResttime(ts, te)
-        t_form = t_intr(ts, te) - tr
+        def calc_form():
+            ts = self.WORK_START_TIME
+            te = self.WORK_END_TIME
+            tr = self.calcResttime(ts, te)
+            return t_intr(ts, te) - tr
 
+        t_form = calc_form()
         t_work = datetime.timedelta(0)
         t_actl = datetime.timedelta(0)
         t_paid = datetime.timedelta(0)
@@ -126,13 +130,13 @@ class _OvertimeCalculator:
             t_work += t_paid
 
         # 年休時間と実労働時間が重ならないように調整。
-        ts = s_time
+        ts = s_time.time()
         if type_off == AM_OFF and ts < self.LUNCH_START_TIME:
             # 午前休み＆昼休み前に開始しているなら、開始時間を修正
             # それ以外（例えば午後遅くに開始とか）ならば修正しない。
             ts = self.LUNCH_START_TIME
 
-        te = e_time
+        te = e_time.time()
         if type_off == PM_OFF and self.LUNCH_END_TIME < te:
             # 午後休み＆昼休み後に終了しているなら、終了時間を修正
             # それ以外（例えば午前中に終了とか）ならば修正しない。
@@ -166,47 +170,48 @@ class MyOvertime(_OvertimeCalculator):
                    datetime.time(hour=19, minute=15))]
 
 
-def T(s):
-    h, m = s.split(':')
-    return datetime.time(hour=int(h), minute=int(m))
-
-def DT(s):
-    h, m = s.split(':')
-    return datetime.timedelta(hours=int(h), minutes=int(m))
-
 def main():
     o = MyOvertime()
     d = datetime.date(year=2022, month=9, day=12)
 
-    assert o.calc(type_off=DAY_OFF, target_date=d) == \
+    def T(s):
+        h, m = s.split(':')
+        t = datetime.time(hour=int(h), minute=int(m))
+        return datetime.datetime.combine(d, t)
+
+    def DT(s):
+        h, m = s.split(':')
+        return datetime.timedelta(hours=int(h), minutes=int(m))
+
+    assert o.calc(type_off=DAY_OFF) == \
         Worktime(form=DT('7:45'), work=DT('7:45'),
                  actl=DT('00:00'), paid=DT('7:45'), rest=DT('00:00'))
 
-    assert o.calc(T('7:30'), T('18:30'), target_date=d) == \
+    assert o.calc(T('7:30'), T('18:30')) == \
         Worktime(form=DT('7:45'), work=DT('10:00'),
                  actl=DT('10:00'), paid=DT('00:00'), rest=DT('1:00'))
 
-    assert o.calc(T('8:15'), T('18:30'), target_date=d) == \
+    assert o.calc(T('8:15'), T('18:30')) == \
         Worktime(form=DT('7:45'), work=DT('9:15'),
                  actl=DT('9:15'), paid=DT('00:00'), rest=DT('1:00'))
 
-    assert o.calc(T('9:00'), T('18:30'), target_date=d) == \
+    assert o.calc(T('9:00'), T('18:30')) == \
         Worktime(form=DT('7:45'), work=DT('8:30'), actl=DT('8:30'),
                  paid=DT('00:00'), rest=DT('1:00'))
 
-    assert o.calc(T('9:00'), T('19:00'), target_date=d) == \
+    assert o.calc(T('9:00'), T('19:00')) == \
         Worktime(form=DT('7:45'), work=DT('8:30'),
-                 actl=DT('8:30'), paid=DT('00:00'),rest=DT('1:30'))
+                 actl=DT('8:30'), paid=DT('00:00'), rest=DT('1:30'))
 
-    assert o.calc(T('9:00'), T('19:30'), target_date=d) == \
+    assert o.calc(T('9:00'), T('19:30')) == \
         Worktime(form=DT('7:45'), work=DT('8:45'),
                  actl=DT('8:45'), paid=DT('00:00'), rest=DT('1:45'))
 
-    assert o.calc(T('9:00'), T('13:00'), type_off=PM_OFF, target_date=d) == \
+    assert o.calc(T('9:00'), T('13:00'), type_off=PM_OFF) == \
         Worktime(form=DT('7:45'), work=DT('7:15'),
                  actl=DT('3:15'), paid=DT('4:00'), rest=DT('0:45'))
-        
-    assert o.calc(T('12:30'), T('16:00'), type_off=AM_OFF, target_date=d) == \
+
+    assert o.calc(T('12:30'), T('16:00'), type_off=AM_OFF) == \
         Worktime(form=DT('7:45'), work=DT('6:30'),
                  actl=DT('2:45'), paid=DT('3:45'), rest=DT('0:45'))
 
