@@ -1,5 +1,6 @@
 # -*- coding:utf-8 -*-
 # import sys
+# import pprint
 import datetime
 from dataclasses import dataclass
 
@@ -26,12 +27,17 @@ def _TM(s):
     return datetime.time(hour=int(h), minute=int(m))
 
 
+def _DT(s, d):
+    h, m = s.split(':')
+    t = datetime.time(hour=int(h), minute=int(m))
+    return datetime.datetime.combine(d, t)
+
 def _TD(s):
     h, m = s.split(':')
     return datetime.timedelta(hours=int(h), minutes=int(m))
 
 
-def _Timedelta2str(t):
+def _TD2str(t):
     s = t.total_seconds()
     p = ' '
     if s < 0:
@@ -62,30 +68,12 @@ class _OvertimeCalculator:
     WORK_TIMES  = (_TM('08:30'), _TM('17:30'))
     LUNCH_TIMES = (_TM('12:00'), _TM('13:00'))
 
+    BASE_TIME  = _TM('05:00')
+
     REST_TIMES = []
 
     def isHoliday(self, d):
         return d.weekday() == 5 or d.weekday() == 6
-
-    def calcResttime(self, ts, te):
-        ''' 時刻tsから時刻teの間の所定休憩時間 '''
-        t = datetime.timedelta(0)
-        d = datetime.date.today()
-
-        def _calc(rs, re):
-            nonlocal t
-            s = rs if ts < rs else ts
-            e = re if re < te else te
-            if s < e:
-                t += (datetime.datetime.combine(d, e) -
-                      datetime.datetime.combine(d, s))
-
-        _calc(self.LUNCH_TIMES[0], self.LUNCH_TIMES[1])
-        for r in self.REST_TIMES:
-            _calc(r[0], r[1])
-
-        # print('R>', ts, te, t)
-        return t
 
     def calc(self, s_time=None, e_time=None, type_off=0):
         if s_time is not None and self.isHoliday(s_time):
@@ -112,23 +100,43 @@ class _OvertimeCalculator:
         t_rest: 休憩時間（中断時間含む）
         '''
 
+        # target date.
         if s_time is None:
             td = datetime.date.today()
+        elif s_time.time() < self.BASE_TIME:
+            td = s_time.date() - _TD('24:00')
         else:
             td = s_time.date()
 
-        def t_intr(s, e):
-            if s < e:
-                return (datetime.datetime.combine(td, e) -
-                        datetime.datetime.combine(td, s))
-            else:
-                return datetime.timedelta(0)
+        comb = datetime.datetime.combine
+        rests = [
+            (comb(td, self.LUNCH_TIMES[0]), comb(td, self.LUNCH_TIMES[1]))
+        ]
+        for r in self.REST_TIMES:
+            r0 = comb(td, r[0]) if r[0] >= self.BASE_TIME \
+                else comb(td + _TD('24:00'), r[0])
+            r1 = comb(td, r[1]) if r[1] >= self.BASE_TIME \
+                else comb(td + _TD('24:00'), r[1])
+
+            assert r0 < r1
+            rests.append((r0, r1))
+
+        def calc_rest(ts, te, rs):
+            t = datetime.timedelta(0)
+            for r in rs:
+                s = r[0] if ts < r[0] else ts
+                e = r[1] if r[1] < te else te
+                if s < e:
+                    t += e - s
+
+            # print('R>', ts, te, t)
+            return t
 
         def calc_form():
-            ts = self.WORK_TIMES[0]
-            te = self.WORK_TIMES[1]
-            tr = self.calcResttime(ts, te)
-            return t_intr(ts, te) - tr
+            ts = comb(td, self.WORK_TIMES[0])
+            te = comb(td, self.WORK_TIMES[1])
+            assert ts < te
+            return (te - ts) - calc_rest(ts, te, rests)
 
         t_form = calc_form()
         t_work = datetime.timedelta(0)
@@ -143,46 +151,48 @@ class _OvertimeCalculator:
             return Worktime(t_form, t_work, t_actl, t_paid, t_rest)
 
         elif type_off == AM_OFF:
-            ts = self.WORK_TIMES[0]
-            te = self.LUNCH_TIMES[0]
-            tr = self.calcResttime(ts, te)
-            t_paid = t_intr(ts, te) - tr
+            ts = comb (td, self.WORK_TIMES[0])
+            te = comb (td, self.LUNCH_TIMES[0])
+            assert ts < te
+            t_paid = (te - ts) - calc_rest(ts, te, rests)
             t_work += t_paid
 
         elif type_off == PM_OFF:
-            ts = self.LUNCH_TIMES[1]
-            te = self.WORK_TIMES[1]
-            tr = self.calcResttime(ts, te)
-            t_paid = t_intr(ts, te) - tr
+            ts = comb (td, self.LUNCH_TIMES[1])
+            te = comb (td, self.WORK_TIMES[1])
+            assert ts < te
+            t_paid = (te - ts) - calc_rest(ts, te, rests)
             t_work += t_paid
 
         # 年休時間と実労働時間が重ならないように調整。
-        ts = s_time.time()
-        if type_off == AM_OFF and ts < self.LUNCH_TIMES[0]:
+        assert s_time is not None
+        ts = s_time
+        if type_off == AM_OFF and ts.time() < self.LUNCH_TIMES[0]:
             # 午前休み＆昼休み前に開始しているなら、開始時間を修正
             # それ以外（例えば午後遅くに開始とか）ならば修正しない。
-            ts = self.LUNCH_TIMES[0]
+            ts = comb(td, self.LUNCH_TIMES[0])
 
-        te = e_time.time()
-        if type_off == PM_OFF and self.LUNCH_TIMES[1] < te:
+        assert e_time is not None
+        te = e_time
+        if type_off == PM_OFF and self.LUNCH_TIMES[1] < te.time():
             # 午後休み＆昼休み後に終了しているなら、終了時間を修正
             # それ以外（例えば午前中に終了とか）ならば修正しない。
-            te = self.LUNCH_TIMES[1]
+            te = comb(td, self.LUNCH_TIMES[1])
 
         if te <= ts:
             # 例えば、午後休みなのに 14時～15時勤務、とかがここに来る。
             return Worktime(t_form, t_work, t_actl, t_paid, t_rest)
 
         # 休憩時間（中断時間含む）
-        t_rest = self.calcResttime(ts, te)
+        t_rest = calc_rest(ts, te, rests)
 
         # 実労働時間
-        t_actl = t_intr(ts, te) - t_rest
+        t_actl = (te - ts) - t_rest
 
         # 勤務時間
         t_work += t_actl
 
-        # print('>', s_time, e_time, _Timedelta2str(t))
+        # print('>', s_time, e_time, _TD2str(t))
         # print('>', s_time, e_time, '|', t_work, t_actl, t_work-t_form)
         return Worktime(t_form, t_work, t_actl, t_paid, t_rest)
 
@@ -202,40 +212,35 @@ def main():
     o = MyOvertime()
     d = datetime.date(year=2022, month=9, day=12)
 
-    def _DT(s):
-        h, m = s.split(':')
-        t = datetime.time(hour=int(h), minute=int(m))
-        return datetime.datetime.combine(d, t)
-
     assert o.calc(type_off=DAY_OFF) == \
         Worktime(form=_TD('07:45'), work=_TD('07:45'),
                  actl=_TD('00:00'), paid=_TD('07:45'), rest=_TD('00:00'))
 
-    assert o.calc(_DT('07:30'), _DT('18:30')) == \
+    assert o.calc(_DT('07:30', d), _DT('18:30', d)) == \
         Worktime(form=_TD('07:45'), work=_TD('10:00'),
                  actl=_TD('10:00'), paid=_TD('00:00'), rest=_TD('01:00'))
 
-    assert o.calc(_DT('08:15'), _DT('18:30')) == \
+    assert o.calc(_DT('08:15', d), _DT('18:30', d)) == \
         Worktime(form=_TD('07:45'), work=_TD('09:15'),
                  actl=_TD('09:15'), paid=_TD('00:00'), rest=_TD('01:00'))
 
-    assert o.calc(_DT('09:00'), _DT('18:30')) == \
+    assert o.calc(_DT('09:00', d), _DT('18:30', d)) == \
         Worktime(form=_TD('07:45'), work=_TD('08:30'),
                  actl=_TD('08:30'), paid=_TD('00:00'), rest=_TD('01:00'))
 
-    assert o.calc(_DT('09:00'), _DT('19:00')) == \
+    assert o.calc(_DT('09:00', d), _DT('19:00', d)) == \
         Worktime(form=_TD('07:45'), work=_TD('09:00'),
                  actl=_TD('09:00'), paid=_TD('00:00'), rest=_TD('01:00'))
 
-    assert o.calc(_DT('09:00'), _DT('20:30')) == \
+    assert o.calc(_DT('09:00', d), _DT('20:30', d)) == \
         Worktime(form=_TD('07:45'), work=_TD('10:00'),
                  actl=_TD('10:00'), paid=_TD('00:00'), rest=_TD('01:30'))
 
-    assert o.calc(_DT('09:00'), _DT('13:00'), type_off=PM_OFF) == \
+    assert o.calc(_DT('09:00', d), _DT('13:00', d), type_off=PM_OFF) == \
         Worktime(form=_TD('07:45'), work=_TD('07:15'),
                  actl=_TD('03:15'), paid=_TD('04:00'), rest=_TD('00:45'))
 
-    assert o.calc(_DT('12:30'), _DT('16:00'), type_off=AM_OFF) == \
+    assert o.calc(_DT('12:30', d), _DT('16:00', d), type_off=AM_OFF) == \
         Worktime(form=_TD('07:45'), work=_TD('06:30'),
                  actl=_TD('02:45'), paid=_TD('03:45'), rest=_TD('00:45'))
 
