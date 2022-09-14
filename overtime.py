@@ -59,11 +59,8 @@ class Worktime:
 
 
 class _OvertimeCalculator:
-    WORK_START_TIME = _TM('08:30')
-    WORK_END_TIME   = _TM('17:30')
-
-    LUNCH_START_TIME = _TM('12:00')
-    LUNCH_END_TIME   = _TM('13:00')
+    WORK_TIMES  = (_TM('08:30'), _TM('17:30'))
+    LUNCH_TIMES = (_TM('12:00'), _TM('13:00'))
 
     REST_TIMES = []
 
@@ -83,7 +80,7 @@ class _OvertimeCalculator:
                 t += (datetime.datetime.combine(d, e) -
                       datetime.datetime.combine(d, s))
 
-        _calc(self.LUNCH_START_TIME, self.LUNCH_END_TIME)
+        _calc(self.LUNCH_TIMES[0], self.LUNCH_TIMES[1])
         for r in self.REST_TIMES:
             _calc(r[0], r[1])
 
@@ -128,8 +125,8 @@ class _OvertimeCalculator:
                 return datetime.timedelta(0)
 
         def calc_form():
-            ts = self.WORK_START_TIME
-            te = self.WORK_END_TIME
+            ts = self.WORK_TIMES[0]
+            te = self.WORK_TIMES[1]
             tr = self.calcResttime(ts, te)
             return t_intr(ts, te) - tr
 
@@ -146,31 +143,31 @@ class _OvertimeCalculator:
             return Worktime(t_form, t_work, t_actl, t_paid, t_rest)
 
         elif type_off == AM_OFF:
-            ts = self.WORK_START_TIME
-            te = self.LUNCH_START_TIME
+            ts = self.WORK_TIMES[0]
+            te = self.LUNCH_TIMES[0]
             tr = self.calcResttime(ts, te)
             t_paid = t_intr(ts, te) - tr
             t_work += t_paid
 
         elif type_off == PM_OFF:
-            ts = self.LUNCH_END_TIME
-            te = self.WORK_END_TIME
+            ts = self.LUNCH_TIMES[1]
+            te = self.WORK_TIMES[1]
             tr = self.calcResttime(ts, te)
             t_paid = t_intr(ts, te) - tr
             t_work += t_paid
 
         # 年休時間と実労働時間が重ならないように調整。
         ts = s_time.time()
-        if type_off == AM_OFF and ts < self.LUNCH_START_TIME:
+        if type_off == AM_OFF and ts < self.LUNCH_TIMES[0]:
             # 午前休み＆昼休み前に開始しているなら、開始時間を修正
             # それ以外（例えば午後遅くに開始とか）ならば修正しない。
-            ts = self.LUNCH_START_TIME
+            ts = self.LUNCH_TIMES[0]
 
         te = e_time.time()
-        if type_off == PM_OFF and self.LUNCH_END_TIME < te:
+        if type_off == PM_OFF and self.LUNCH_TIMES[1] < te:
             # 午後休み＆昼休み後に終了しているなら、終了時間を修正
             # それ以外（例えば午前中に終了とか）ならば修正しない。
-            te = self.LUNCH_END_TIME
+            te = self.LUNCH_TIMES[1]
 
         if te <= ts:
             # 例えば、午後休みなのに 14時～15時勤務、とかがここに来る。
@@ -191,11 +188,8 @@ class _OvertimeCalculator:
 
 
 class MyOvertime(_OvertimeCalculator):
-    WORK_START_TIME = _TM('08:30')
-    WORK_END_TIME   = _TM('17:15')
-
-    LUNCH_START_TIME = _TM('12:15')
-    LUNCH_END_TIME   = _TM('13:15')
+    WORK_TIMES  = (_TM('08:30'), _TM('17:15'))
+    LUNCH_TIMES = (_TM('12:15'), _TM('13:15'))
 
     REST_TIMES = [
         (_TM('05:00'), _TM('05:30')),
