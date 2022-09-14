@@ -4,8 +4,8 @@ import datetime
 from dataclasses import dataclass
 
 DAY_OFF = 10
-AM_OFF = 20
-PM_OFF = 30
+AM_OFF  = 20
+PM_OFF  = 30
 
 '''
 ここでは
@@ -19,6 +19,16 @@ PM_OFF = 30
 ・実労働時間と年休時間が被っている場合は年休時間を優先
 とする。
 '''
+
+
+def _TM(s):
+    h, m = s.split(':')
+    return datetime.time(hour=int(h), minute=int(m))
+
+
+def _TD(s):
+    h, m = s.split(':')
+    return datetime.timedelta(hours=int(h), minutes=int(m))
 
 
 def _Timedelta2str(t):
@@ -49,14 +59,15 @@ class Worktime:
 
 
 class _OvertimeCalculator:
-    WORK_START_TIME = datetime.time(hour=8, minute=30)
-    WORK_END_TIME = datetime.time(hour=17, minute=30)
-    LUNCH_START_TIME = datetime.time(hour=12, minute=0)
-    LUNCH_END_TIME = datetime.time(hour=13, minute=0)
+    WORK_START_TIME = _TM('08:30')
+    WORK_END_TIME   = _TM('17:30')
+
+    LUNCH_START_TIME = _TM('12:00')
+    LUNCH_END_TIME   = _TM('13:00')
 
     REST_TIMES = []
 
-    def isHoliday(cls, d):
+    def isHoliday(self, d):
         return d.weekday() == 5 or d.weekday() == 6
 
     def calcResttime(self, ts, te):
@@ -180,59 +191,59 @@ class _OvertimeCalculator:
 
 
 class MyOvertime(_OvertimeCalculator):
-    WORK_START_TIME = datetime.time(hour=8, minute=30)
-    WORK_END_TIME = datetime.time(hour=17, minute=15)
-    LUNCH_START_TIME = datetime.time(hour=12, minute=15)
-    LUNCH_END_TIME = datetime.time(hour=13, minute=15)
+    WORK_START_TIME = _TM('08:30')
+    WORK_END_TIME   = _TM('17:15')
 
-    REST_TIMES = [(datetime.time(hour=18, minute=30),
-                   datetime.time(hour=19, minute=15))]
+    LUNCH_START_TIME = _TM('12:15')
+    LUNCH_END_TIME   = _TM('13:15')
+
+    REST_TIMES = [
+        (_TM('05:00'), _TM('05:30')),
+        (_TM('19:15'), _TM('19:45')),
+        (_TM('23:15'), _TM('00:00')),
+    ]
 
 
 def main():
     o = MyOvertime()
     d = datetime.date(year=2022, month=9, day=12)
 
-    def T(s):
+    def _DT(s):
         h, m = s.split(':')
         t = datetime.time(hour=int(h), minute=int(m))
         return datetime.datetime.combine(d, t)
 
-    def DT(s):
-        h, m = s.split(':')
-        return datetime.timedelta(hours=int(h), minutes=int(m))
-
     assert o.calc(type_off=DAY_OFF) == \
-        Worktime(form=DT('7:45'), work=DT('7:45'),
-                 actl=DT('00:00'), paid=DT('7:45'), rest=DT('00:00'))
+        Worktime(form=_TD('07:45'), work=_TD('07:45'),
+                 actl=_TD('00:00'), paid=_TD('07:45'), rest=_TD('00:00'))
 
-    assert o.calc(T('7:30'), T('18:30')) == \
-        Worktime(form=DT('7:45'), work=DT('10:00'),
-                 actl=DT('10:00'), paid=DT('00:00'), rest=DT('1:00'))
+    assert o.calc(_DT('07:30'), _DT('18:30')) == \
+        Worktime(form=_TD('07:45'), work=_TD('10:00'),
+                 actl=_TD('10:00'), paid=_TD('00:00'), rest=_TD('01:00'))
 
-    assert o.calc(T('8:15'), T('18:30')) == \
-        Worktime(form=DT('7:45'), work=DT('9:15'),
-                 actl=DT('9:15'), paid=DT('00:00'), rest=DT('1:00'))
+    assert o.calc(_DT('08:15'), _DT('18:30')) == \
+        Worktime(form=_TD('07:45'), work=_TD('09:15'),
+                 actl=_TD('09:15'), paid=_TD('00:00'), rest=_TD('01:00'))
 
-    assert o.calc(T('9:00'), T('18:30')) == \
-        Worktime(form=DT('7:45'), work=DT('8:30'), actl=DT('8:30'),
-                 paid=DT('00:00'), rest=DT('1:00'))
+    assert o.calc(_DT('09:00'), _DT('18:30')) == \
+        Worktime(form=_TD('07:45'), work=_TD('08:30'),
+                 actl=_TD('08:30'), paid=_TD('00:00'), rest=_TD('01:00'))
 
-    assert o.calc(T('9:00'), T('19:00')) == \
-        Worktime(form=DT('7:45'), work=DT('8:30'),
-                 actl=DT('8:30'), paid=DT('00:00'), rest=DT('1:30'))
+    assert o.calc(_DT('09:00'), _DT('19:00')) == \
+        Worktime(form=_TD('07:45'), work=_TD('09:00'),
+                 actl=_TD('09:00'), paid=_TD('00:00'), rest=_TD('01:00'))
 
-    assert o.calc(T('9:00'), T('19:30')) == \
-        Worktime(form=DT('7:45'), work=DT('8:45'),
-                 actl=DT('8:45'), paid=DT('00:00'), rest=DT('1:45'))
+    assert o.calc(_DT('09:00'), _DT('20:30')) == \
+        Worktime(form=_TD('07:45'), work=_TD('10:00'),
+                 actl=_TD('10:00'), paid=_TD('00:00'), rest=_TD('01:30'))
 
-    assert o.calc(T('9:00'), T('13:00'), type_off=PM_OFF) == \
-        Worktime(form=DT('7:45'), work=DT('7:15'),
-                 actl=DT('3:15'), paid=DT('4:00'), rest=DT('0:45'))
+    assert o.calc(_DT('09:00'), _DT('13:00'), type_off=PM_OFF) == \
+        Worktime(form=_TD('07:45'), work=_TD('07:15'),
+                 actl=_TD('03:15'), paid=_TD('04:00'), rest=_TD('00:45'))
 
-    assert o.calc(T('12:30'), T('16:00'), type_off=AM_OFF) == \
-        Worktime(form=DT('7:45'), work=DT('6:30'),
-                 actl=DT('2:45'), paid=DT('3:45'), rest=DT('0:45'))
+    assert o.calc(_DT('12:30'), _DT('16:00'), type_off=AM_OFF) == \
+        Worktime(form=_TD('07:45'), work=_TD('06:30'),
+                 actl=_TD('02:45'), paid=_TD('03:45'), rest=_TD('00:45'))
 
     def HT(s):
         hd = datetime.date(year=2022, month=9, day=10)
@@ -240,13 +251,13 @@ def main():
         t = datetime.time(hour=int(h), minute=int(m))
         return datetime.datetime.combine(hd, t)
 
-    assert o.calc(HT('7:10'), HT('13:30')) == \
-        Worktime(form=DT('0:00'), work=DT('6:20'),
-                 actl=DT('6:20'), paid=DT('0:00'), rest=DT('0:00'))
+    assert o.calc(HT('07:10'), HT('13:30')) == \
+        Worktime(form=_TD('00:00'), work=_TD('06:20'),
+                 actl=_TD('06:20'), paid=_TD('00:00'), rest=_TD('00:00'))
 
     assert o.calc(HT('12:30'), HT('16:00')) == \
-        Worktime(form=DT('0:00'), work=DT('3:30'),
-                 actl=DT('3:30'), paid=DT('0:00'), rest=DT('0:00'))
+        Worktime(form=_TD('00:00'), work=_TD('03:30'),
+                 actl=_TD('03:30'), paid=_TD('00:00'), rest=_TD('00:00'))
 
 
 if __name__ == '__main__':
