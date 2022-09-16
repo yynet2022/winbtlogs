@@ -1,0 +1,124 @@
+Option VBASupport 1
+
+REM  *****  BASIC  *****
+
+Sub Main
+	Dim 定時(2) As Date
+	定時(1) = Cells(2,2)
+	定時(2) = CElls(2,3)
+		
+	Dim 昼休み(2) As Date
+	昼休み(1) = Cells(3,2)
+	昼休み(2) = Cells(3,3)
+	
+	Dim 朝休み(2) As Date
+	朝休み(1) = Cells(4,2)
+	朝休み(2) = Cells(4,3)
+
+	Dim 夕休み(2) As Date
+	夕休み(1) = Cells(5,2)
+	夕休み(2) = Cells(5,3)
+
+	Dim 夕休みAM(2) As Date
+	夕休みAM(1) = Cells(6,2)
+	夕休みAM(2) = Cells(6,3)
+
+	Dim 深夜休み(2) As Date
+	深夜休み(1) = Cells(7,2)
+	深夜休み(2) = Cells(7,3)
+
+	Dim 年 As Integer, 月 As Integer
+	年 = Cells(9,2)
+	月 = Cells(9,3)
+
+	Dim S, E, k, kk, i
+	S = DateSerial (年, 月, 1)
+	E = DateSerial (年, 月+1, 0)
+	k = 1
+	For i = S To E
+		kk = 10 + k
+		Cells(kk, 1) = i
+
+		If Weekday(i) = vbSunday Or Weekday(i) = vbSaturday Then
+			Cells (kk, 7) = 10
+		End If 
+
+		Dim 勤務日種別 As Integer
+		勤務日種別 = Cells (kk, 8)
+		If 勤務日種別 = 3 Then
+			Cells(kk, 2).Clear
+			Cells(kk,3).Clear
+		End If
+
+		Dim 休憩時間 As Date
+		休憩時間 = 昼休み(2) - 昼休み(1)
+
+		Dim 定時時間 As Date
+		定時時間 = 定時(2) - 定時(1) - 休憩時間
+
+		if Cells(kk, 2).Value = "" Or  Cells(kk, 3).Value = "" Then
+			Range(Cells(kk,4), Cells(kk,7)).Clear
+		Else
+			' Print(i & " " & DayType & " " & 定時時間 " & 休憩時間
+			Dim 勤務開始te As Date, 勤務終了 As Date
+			勤務開始 = Cells (kk, 2)
+			勤務終了 = Cells (kk, 3)
+			If 勤務日種別 = 10 Then ' 休日
+				休憩時間 = 0
+				定時時間 = 0
+			Else
+				If 勤務開始 < 朝休み(2) Then
+					勤務開始 = 朝休み(2)
+				End If
+				If 勤務日種別 = 1 Then ' AM休み
+					If 勤務開始 < 昼休み(2) Then
+						勤務開始 = 昼休み(2)
+					End If
+					休憩時間 = 0
+					定時時間 = 定時(2) - 昼休み(2)
+					If 夕休みAM(1) < 勤務開始 And 勤務開始 < 夕休みAM(2) Then
+						勤務開始 = 夕休みAM(1)
+					End If
+					If 夕休みAM(1) < 勤務終了 And 勤務終了 < 夕休みAM(2) Then
+						勤務終了 = 夕休みAM(1)
+					ElseIf 夕休みAM(2) <= 勤務終了 Then
+						休憩時間 = 夕休みAM(2) - 夕休みAM(1)
+					End If
+				ElseIf 勤務日種別 = 2 Then ' PM休み
+					If 昼休み(1) < 勤務終了 Then
+						勤務終了 = 昼休み(1)
+					End If
+					休憩時間 = 0
+					定時時間 = 昼休み(1) - 定時(1)
+				End If
+				If 勤務日種別 <> 1 Then
+					If 夕休み(1) < 勤務開始 And 勤務開始 < 夕休み(2) Then
+						勤務開始 = 夕休み(1)
+					End If
+					If 夕休み(1) < 勤務終了 And 勤務終了 < 夕休み(2) Then
+						勤務終了 = 夕休み(1)
+					ElseIf 夕休み(2) <= 勤務終了 Then
+						休憩時間 = 休憩時間 + (夕休み(2) - 夕休み(1))
+					End If
+				End If
+			End If
+			
+			勤務時間 = 勤務終了 - 勤務開始 - 休憩時間
+			Cells(kk, 4) = Format(休憩時間, "[h]:mm")
+			Cells(kk, 5) = Format(勤務時間, "[h]:mm")
+			If 勤務時間 < 定時時間 Then
+				Cells(kk,6).Clear
+				Cells(kk,7) = format(定時時間 - 勤務時間, "[h]:mm")
+			Else
+				Cells(kk,6) = format(勤務時間 - 定時時間, "[h]:mm")
+				Cells(kk,7).Clear
+			End If
+		End If
+		k = k + 1
+	Next i
+	for i = 1 To 5
+		Cells(10+k, 1).Clear
+		k = k + 1
+	Next
+
+End Sub
