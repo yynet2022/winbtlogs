@@ -56,11 +56,13 @@ Sub Main
 	Const t休日 As Integer = 10
 
 	Dim k As Integer, kk As Integer, j As Integer
-	Dim S, E, idate, v, u
-	S = DateSerial (年, 月, 1)
-	E = DateSerial (年, 月+1, 0)
+	Dim v, u
+
+	Dim dateS As Date: dateS = DateSerial (年, 月, 1)
+	Dim dateE As Date: dateE = DateSerial (年, 月+1, 0)
+	Dim idate As Date
 	k = 1
-	For idate = S To E
+	For idate = dateS To dateE
 		kk = 10 + k
 		Cells(kk, i日付) = idate
 
@@ -81,16 +83,20 @@ Sub Main
 		Dim 定時時間 As Date
 		定時時間 = 0
 
-		if Cells(kk, i勤務開始).Value = "" Or  Cells(kk, i勤務終了).Value = "" Then
-			Range(Cells(kk, i休憩時間), Cells(kk, i残業時間負)).ClearContents
+		if Not IsDate(Cells(kk, i勤務開始).Value) Or Not IsDate(Cells(kk, i勤務終了).Value) Then
+			With Range(Cells(kk, i休憩時間), Cells(kk, i残業時間負))
+				.Value = 0
+				.NumberFormatLocal = "[h]:mm"
+				.ClearContents
+			End with
 		Else
-			' Print(i & " " & 勤務日種別 & " " & 定時時間 " & 休憩時間
 			Dim 勤務開始 As Date, 勤務終了 As Date
 			勤務開始 = Cells (kk, i勤務開始)
 			勤務終了 = Cells (kk, i勤務終了)
+
 			If 勤務日種別 = t休日 Then
 				j = 0
-				Do Until Cells(kk, i勤務中断+j).Value = "" Or Cells(kk, i勤務中断+j+1).Value = ""
+				Do Until Not IsDate(Cells(kk, i勤務中断+j).Value) Or Not IsDate(Cells(kk, i勤務中断+j+1).Value)
 					勤務中断(1) = _Max(勤務開始, Cells(kk, i勤務中断 + j    ))
 					勤務中断(2) = _Min(勤務終了, Cells(kk, i勤務中断 + j + 1))
 					Cells(kk, i勤務中断 + j    ).NumberFormatLocal = "[h]:mm"
@@ -98,53 +104,55 @@ Sub Main
 					休憩時間 = 休憩時間 + 中断時間(勤務中断(), dummy(), dummy(), dummy())
 					j = j + 2
 				Loop
+			ElseIf 勤務日種別 = tAM休 Then
+				If 勤務開始 < 昼休み(2) Then
+					休憩時間 = 休憩時間 + (昼休み(2) - 勤務開始)
+				End If
+				定時時間 = 定時(2) - 昼休み(2)
+
+				v = _Max(勤務開始, 夕休みAM(1))
+				u = _Min(勤務終了, 夕休みAM(2))
+				If v < u Then 休憩時間 = 休憩時間 + (u - v)
+
+				j = 0
+				Do Until Not IsDate(Cells(kk, i勤務中断+j).Value) Or Not IsDate(Cells(kk, i勤務中断+j+1).Value)
+					勤務中断(1) = _Max(昼休み(2), _Max(勤務開始, Cells(kk, i勤務中断 + j)))
+					勤務中断(2) = _Min(勤務終了, Cells(kk, i勤務中断 + j + 1))
+					Cells(kk, i勤務中断 + j    ).NumberFormatLocal = "[h]:mm"
+					Cells(kk, i勤務中断 + j + 1).NumberFormatLocal = "[h]:mm"
+					休憩時間 = 休憩時間 + 中断時間(勤務中断(), 昼休み(), 朝休み(), 夕休みAM())
+					j = j + 2
+				Loop
 			Else
 				If 勤務開始 < 朝休み(2) Then
 					休憩時間 = 休憩時間 + (朝休み(2) - 勤務開始)
 				End If
-				If 勤務日種別 = tAM休 Then
-					If 勤務開始 < 昼休み(2) Then
-						休憩時間 = 休憩時間 + (昼休み(2) - 勤務開始)
-					End If
-					定時時間 = 定時(2) - 昼休み(2)
 
-					v = _Max(勤務開始, 夕休みAM(1))
-					u = _Min(勤務終了, 夕休みAM(2))
-					If v < u Then 休憩時間 = 休憩時間 + (u - v)
-
-					j = 0
-					Do Until Cells(kk, i勤務中断+j).Value = "" Or Cells(kk, i勤務中断+j+1).Value = ""
-						勤務中断(1) = _Max(昼休み(2), _Max(勤務開始, Cells(kk, i勤務中断 + j)))
-						勤務中断(2) = _Min(勤務終了, Cells(kk, i勤務中断 + j + 1))
-						Cells(kk, i勤務中断 + j    ).NumberFormatLocal = "[h]:mm"
-						Cells(kk, i勤務中断 + j + 1).NumberFormatLocal = "[h]:mm"
-						休憩時間 = 休憩時間 + 中断時間(勤務中断(), 昼休み(), 朝休み(), 夕休みAM())
-						j = j + 2
-					Loop
-				ElseIf 勤務日種別 = tPM休 Then
+				If 勤務日種別 = tPM休 Then
 					If 昼休み(1) < 勤務終了 Then
 						休憩時間 = 休憩時間 + (勤務終了 - 昼休み(1))
 					End If
 					定時時間 = 昼休み(1) - 定時(1)
 				Else
-					休憩時間 = 休憩時間 + (昼休み(2) - 昼休み(1))
+					v = _Max(勤務開始, 昼休み(1))
+					u = _Min(勤務終了, 昼休み(2))
+					If v < u Then 休憩時間 = 休憩時間 + (u - v)
 					定時時間 = (定時(2) - 定時(1)) - (昼休み(2) - 昼休み(1))
 				End If
-				If 勤務日種別 <> tAM休 Then
-					v = _Max(勤務開始, 夕休み(1))
-					u = _Min(勤務終了, 夕休み(2))
-					If v < u Then 休憩時間 = 休憩時間 + (u - v)
 
-					j = 0
-					Do Until Cells(kk, i勤務中断+j).Value = "" Or Cells(kk, i勤務中断+j+1).Value = ""
-						勤務中断(1) = _Max(勤務開始, Cells(kk, i勤務中断 + j    ))
-						勤務中断(2) = _Min(勤務終了, Cells(kk, i勤務中断 + j + 1))
-						Cells(kk, i勤務中断 + j    ).NumberFormatLocal = "[h]:mm"
-						Cells(kk, i勤務中断 + j + 1).NumberFormatLocal = "[h]:mm"
-						休憩時間 = 休憩時間 + 中断時間(勤務中断(), 昼休み(), 朝休み(), 夕休み())
-						j = j + 2
-					Loop
-				End If
+				v = _Max(勤務開始, 夕休み(1))
+				u = _Min(勤務終了, 夕休み(2))
+				If v < u Then 休憩時間 = 休憩時間 + (u - v)
+
+				j = 0
+				Do Until Not IsDate(Cells(kk, i勤務中断+j).Value) Or Not IsDate(Cells(kk, i勤務中断+j+1).Value)
+					勤務中断(1) = _Max(勤務開始, Cells(kk, i勤務中断 + j    ))
+					勤務中断(2) = _Min(勤務終了, Cells(kk, i勤務中断 + j + 1))
+					Cells(kk, i勤務中断 + j    ).NumberFormatLocal = "[h]:mm"
+					Cells(kk, i勤務中断 + j + 1).NumberFormatLocal = "[h]:mm"
+					休憩時間 = 休憩時間 + 中断時間(勤務中断(), 昼休み(), 朝休み(), 夕休み())
+					j = j + 2
+				Loop
 			End If
 
 			Dim 実労働時間 As Date
@@ -154,16 +162,16 @@ Sub Main
 				実労働時間 = 勤務終了 - 勤務開始 - 休憩時間
 			End If
 			Cells(kk, i休憩時間).NumberFormatLocal = "[h]:mm"
-			Cells(kk, i休憩時間) = 休憩時間
+			Cells(kk, i休憩時間).Value = 休憩時間
 			Cells(kk, i実労働時間).NumberFormatLocal = "[h]:mm"
-			Cells(kk, i実労働時間) = 実労働時間
+			Cells(kk, i実労働時間).Value = 実労働時間
 			If 実労働時間 < 定時時間 Then
 				Cells(kk, i残業時間正).ClearContents
 				Cells(kk, i残業時間負).NumberFormatLocal = "[h]:mm"
-				Cells(kk, i残業時間負) = 定時時間 - 実労働時間
+				Cells(kk, i残業時間負).Value = 定時時間 - 実労働時間
 			Else
 				Cells(kk, i残業時間正).NumberFormatLocal = "[h]:mm"
-				Cells(kk, i残業時間正) = 実労働時間 - 定時時間
+				Cells(kk, i残業時間正).Value = 実労働時間 - 定時時間
 				Cells(kk, i残業時間負).ClearContents
 			End If
 		End If
@@ -171,15 +179,15 @@ Sub Main
 	Next idate
 
 	Range(Cells(10+k, 1), Cells(10+k, 30)).ClearContents
-	Cells(10+k, i日付) = "合計"
+	Cells(10+k, i日付).Value = "合計"
 	Cells(10+k, i休憩時間).NumberFormatLocal = "[h]:mm"
-	Cells(10+k, i休憩時間) = WorksheetFunction.Sum(Range(Cells(10+1,i休憩時間),Cells(10+k-1,i休憩時間)))
+	Cells(10+k, i休憩時間).Value = WorksheetFunction.Sum(Range(Cells(10+1,i休憩時間),Cells(10+k-1,i休憩時間)))
 	Cells(10+k, i実労働時間).NumberFormatLocal = "[h]:mm"
-	Cells(10+k, i実労働時間) = WorksheetFunction.Sum(Range(Cells(10+1,i実労働時間),Cells(10+k-1,i実労働時間)))
+	Cells(10+k, i実労働時間).Value = WorksheetFunction.Sum(Range(Cells(10+1,i実労働時間),Cells(10+k-1,i実労働時間)))
 	Cells(10+k, i残業時間正).NumberFormatLocal = "[h]:mm"
-	Cells(10+k, i残業時間正) = WorksheetFunction.Sum(Range(Cells(10+1,i残業時間正),Cells(10+k-1,i残業時間正)))
+	Cells(10+k, i残業時間正).Value = WorksheetFunction.Sum(Range(Cells(10+1,i残業時間正),Cells(10+k-1,i残業時間正)))
 	Cells(10+k, i残業時間負).NumberFormatLocal = "[h]:mm"
-	Cells(10+k, i残業時間負) = WorksheetFunction.Sum(Range(Cells(10+1,i残業時間負),Cells(10+k-1,i残業時間負)))
+	Cells(10+k, i残業時間負).Value = WorksheetFunction.Sum(Range(Cells(10+1,i残業時間負),Cells(10+k-1,i残業時間負)))
 	k = k + 1
 
 	for j = 1 To 5
