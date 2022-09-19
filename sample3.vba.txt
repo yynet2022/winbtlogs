@@ -19,7 +19,7 @@ Const tPM休 As Integer = 2
 Const t終日休 As Integer = 3
 Const t休日 As Integer = 10
 
-Sub セットアップ
+Sub セットアップ()
 	Dim 年 As Integer, 月 As Integer
 	年 = Cells(9,2)
 	月 = Cells(9,3)
@@ -56,7 +56,7 @@ Sub セットアップ
 	Next j
 End Sub
 
-Sub メイン
+Sub メイン()
 	Dim BASETIME As Date: BASETIME = TimeSerial (5, 0, 0)
 
 	Const j開始 As Integer = 2
@@ -111,7 +111,7 @@ Sub メイン
 			Cells(k, i勤務終了).ClearContents
 		End If
 
-		if IsEmpty(Cells(k, i勤務開始).Value) Or IsEmpty(Cells(k, i勤務終了).Value) Then
+		If IsEmpty(Cells(k, i勤務開始).Value) Or IsEmpty(Cells(k, i勤務終了).Value) Then
 			With Range(Cells(k, i休憩時間), Cells(k, i残業時間負))
 				.Value = 0
 				.ClearContents
