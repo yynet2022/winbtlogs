@@ -1,5 +1,6 @@
 Option VBASupport 1
 Option Explicit
+Option Base 1
 
 REM  *****  BASIC  *****
 
@@ -20,6 +21,7 @@ Const t終日休 As Integer = 3
 Const t休日 As Integer = 10
 
 Sub セットアップ()
+	On Error GoTo myError
 	Dim 年 As Integer, 月 As Integer
 	年 = Cells(9,2)
 	月 = Cells(9,3)
@@ -29,7 +31,10 @@ Sub セットアップ()
 	Dim idate As Date
 	Dim k As Integer: k = 11
 	For idate = dateS To dateE
-		Cells(k, i日付) = idate
+		With Cells(k, i日付)
+			.Value = idate
+			.NumberFormatLocal = "m月d日"
+		End With
 		If Weekday(idate) = vbSunday Or Weekday(idate) = vbSaturday Then
 			Cells (k, i勤務日種別) = t休日
 		ElseIf Cells (k, i勤務日種別) = t休日 Then
@@ -54,9 +59,17 @@ Sub セットアップ()
 	For j = k To k + 5
 		Range(Cells(j, 1), Cells(j, 30)).ClearContents
 	Next j
+
+	myError:
+	If Err.Number <> 0 Then
+		MsgBox "エラーが発生しました。" & vbCrLf & _
+			"エラー番号：" & Err.Number & vbCrLf & _
+			"エラー概要：" & Err.Description, vbExclamation
+	End If
 End Sub
 
 Sub メイン()
+	On Error GoTo myError
 	Dim BASETIME As Date: BASETIME = TimeSerial (5, 0, 0)
 
 	Const j開始 As Integer = 2
@@ -86,16 +99,14 @@ Sub メイン()
 	深夜休み(1) = Cells(7, j開始) - BASETIME
 	深夜休み(2) = Cells(7, j終了) - BASETIME
 
-	Dim 勤務中断(2) As Date, dummy(2) As Date
-	dummy(1) = 0
-	dummy(2) = 0
+	Dim 勤務中断(2) As Date
 
 	Dim 年 As Integer, 月 As Integer
 	年 = Cells(9,2)
 	月 = Cells(9,3)
 
 	Dim j As Integer
-	Dim v, u
+	Dim v As Variant, u As Variant
 
 	Dim dateS As Date: dateS = DateSerial (年, 月, 1)
 	Dim dateE As Date: dateE = DateSerial (年, 月+1, 0)
@@ -138,31 +149,31 @@ Sub メイン()
 			ElseIf 勤務日種別 = tAM休 Then
 				定時時間 = 定時(2) - 昼休み(2)
 
-				dummy(1) = TimeValue("00:00")
-				dummy(2) = 昼休み(2)
-				休憩時間 = 休憩時間 + 重複時間(勤務開始, 勤務終了, dummy(1), dummy(2)) _
+				v = Array(TimeValue("00:00"), 昼休み(2))
+				休憩時間 = 休憩時間 + 重複時間(勤務開始, 勤務終了, v(1), v(2)) _
 								   + 重複時間(勤務開始, 勤務終了, 夕休みAM(1), 夕休みAM(2))
 
 				j = 0
+				u = Array(v, 夕休みAM)
 				Do Until IsEmpty(Cells(k, i勤務中断+j).Value) Or IsEmpty(Cells(k, i勤務中断+j+1).Value)
 					勤務中断(1) = p_Max(勤務開始, Cells(k, i勤務中断 + j    ) - BASETIME)
 					勤務中断(2) = p_Min(勤務終了, Cells(k, i勤務中断 + j + 1) - BASETIME)
-					休憩時間 = 休憩時間 + 中断時間(勤務中断(), dummy(), 夕休みAM())
+					休憩時間 = 休憩時間 + 中断時間(勤務中断(), u)
 					j = j + 2
 				Loop
 			ElseIf 勤務日種別 = tPM休 Then
 				定時時間 = 昼休み(1) - 定時(1)
 
-				dummy(1) = 昼休み(1)
-				dummy(2) = TimeValue("23:59")
+				v = Array(昼休み(1), TimeValue("23:59"))
 				休憩時間 = 休憩時間 + 重複時間(勤務開始, 勤務終了, 朝休み(1), 朝休み(2)) _
-								   + 重複時間(勤務開始, 勤務終了, dummy(1), dummy(2))
+								   + 重複時間(勤務開始, 勤務終了, v(1), v(2))
 
 				j = 0
+				u = Array(朝休み, v)
 				Do Until IsEmpty(Cells(k, i勤務中断+j).Value) Or IsEmpty(Cells(k, i勤務中断+j+1).Value)
 					勤務中断(1) = p_Max(勤務開始, Cells(k, i勤務中断 + j    ) - BASETIME)
 					勤務中断(2) = p_Min(勤務終了, Cells(k, i勤務中断 + j + 1) - BASETIME)
-					休憩時間 = 休憩時間 + 中断時間(勤務中断(), 朝休み(), dummy())
+					休憩時間 = 休憩時間 + 中断時間(勤務中断(), u)
 					j = j + 2
 				Loop
 			Else
@@ -172,10 +183,11 @@ Sub メイン()
 								   + 重複時間(勤務開始, 勤務終了, 夕休み(1), 夕休み(2))
 
 				j = 0
+				u = Array(朝休み, 昼休み, 夕休み)
 				Do Until IsEmpty(Cells(k, i勤務中断+j).Value) Or IsEmpty(Cells(k, i勤務中断+j+1).Value)
 					勤務中断(1) = p_Max(勤務開始, Cells(k, i勤務中断 + j    ) - BASETIME)
 					勤務中断(2) = p_Min(勤務終了, Cells(k, i勤務中断 + j + 1) - BASETIME)
-					休憩時間 = 休憩時間 + 中断時間(勤務中断(), 朝休み(), 昼休み(), 夕休み())
+					休憩時間 = 休憩時間 + 中断時間(勤務中断(), u)
 					j = j + 2
 				Loop
 			End If
@@ -200,16 +212,24 @@ Sub メイン()
 	For j = i休憩時間 To i残業時間負
 		Cells(k, j) = WorksheetFunction.Sum(Range(Cells(11,j), Cells(k-1,j)))
 	Next j
+
+	myError:
+	If Err.Number <> 0 Then
+		Dim s As String: s = ""
+		If Not IsEmpty(idate) Then s = "(at " & idate & ")"
+		MsgBox "エラーが発生しました。" & s & vbCrLf & _
+			"エラー番号：" & Err.Number & vbCrLf & _
+			"エラー概要：" & Err.Description, vbExclamation
+	End If
 End Sub
 
-Private Function 中断時間(中断() As Date, 休み1() As Date, 休み2() As Date, Optional 休み3 As Variant) As Date
+Private Function 中断時間(中断() As Date, 休憩リスト As Variant) As Date
 	Dim t As Date: t = 0
 
-	t = t + 重複時間(中断(1), 中断(2), 休み1(1), 休み1(2))
-	t = t + 重複時間(中断(1), 中断(2), 休み2(1), 休み2(2))
-	If Not IsMissing(休み3) Then
-		t = t + 重複時間(中断(1), 中断(2), CDate(休み3(1)), CDate(休み3(2)))
-	End If
+	Dim v As Variant
+	For Each v In 休憩リスト
+		t = t + 重複時間(中断(1), 中断(2), v(1), v(2))
+	Next v
 
 	中断時間 = 0
 	If 中断(2) > 中断(1) + t Then 中断時間 = 中断(2) - 中断(1) - t
